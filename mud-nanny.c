@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 int
 main (int argc, char** argv)
@@ -34,6 +35,46 @@ main (int argc, char** argv)
 
 	path = argv[1];
 	script = argv[2];
+
+	/* Daemonize */
+
+	ret = fork();
+	if (ret == -1) {
+		fprintf(stderr, "fork() failed: %s\n", strerror(errno));
+		exit(1);
+	}
+	if (ret != 0) {
+		exit(0);
+	}
+
+	if (setsid() == -1) {
+		fprintf(stderr, "setsid() failed: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	ret = fork();
+	if (ret == -1) {
+		fprintf(stderr, "fork() failed: %s\n", strerror(errno));
+		exit(1);
+	}
+	if (ret != 0) {
+		exit(0);
+	}
+
+	close(0);
+	if (open("/dev/null", O_RDONLY) == -1) {
+		fprintf(stderr, "open() failed: %s\n", strerror(errno));
+		exit(1);
+	}
+	close(1);
+	if (open("/dev/null", O_WRONLY) == -1) {
+		fprintf(stderr, "open() failed: %s\n", strerror(errno));
+		exit(1);
+	}
+	close(2);
+	if (open("/dev/null", O_WRONLY) == -1) {
+		exit(1);
+	}
 
 	/* Main loop */
 	while(1) {
@@ -76,7 +117,7 @@ main (int argc, char** argv)
 			execl(script, script, ret_type, ret_buf, time_buf, path, NULL);
 
 			/* execl() failed */
-			exit(1);
+			exit(99);
 		}
 
 		/* Wait for script to terminate */
@@ -94,24 +135,9 @@ main (int argc, char** argv)
 			exit(1);
 		}
 
-		/* Process return codes */
-		switch (WEXITSTATUS(status)) {
-			case 0: /* restart server */
-				break;
-			case 1: /* clean shutdown */
-				exit(0);
-			case 3: /* wait 30 seconds */
-				sleep(30);
-				break;
-			case 5: /* wait 5 minutes */
-				sleep(60*5);
-				break;
-			case 6: /* wait one hour */ 
-				sleep(60*60);
-				break;
-			default: /* unknown code; fail */
-				fprintf(stderr, "%s returned unknown code %d\n", script, WEXITSTATUS(status));
-				exit(1);
+		/* If we have a non-zero return, finish */
+		if (WEXITSTATUS(status) != 0) {
+			exit(0);
 		}
 	}
 

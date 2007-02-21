@@ -1,0 +1,75 @@
+#!/bin/sh
+# MUD Nanny
+# Sean Middleditch / AwesomePlay Productions, Inc.
+# elanthis@awemud.net
+# THIS IS PUBLIC DOMAIN
+
+ADMIN="$USER@$(hostname -f)"
+MUD_NAME=""
+MN_NAME="MUD Nanny"
+
+# Requires that the 'mail' command is in the PATH.
+
+# Default behavior is to restart the MUD, after some wait.  An
+# exit code of 0 from the MUD will indicate a desired shutdown of
+# the MUD, and the script will return 1 and shutdown MUD Nanny.
+# For other exit codes or signal shutdowns, the MUD will be
+# restarted immediately if its uptime was at least 30 seconds;
+# otherwise, the server will wait 1 hour, as it assumes that
+# the MUD is always crashing on startup.
+
+EXIT="$1"
+CODE="$2"
+TIME="$3"
+PATH="$4"
+
+[ -n "$MUD_NAME" ] || MUD_NAME="$PATH"
+
+WAIT="0"
+WAITMSG="immediately"
+
+if [ "$TIME" -lt 30 ] ; then
+	WAIT="900" # 15 minutes
+	WAITMSG="in 15 minutes"
+fi
+
+case "$EXIT" in
+	'exit')
+		[ "$CODE" = 0 ] && exit 1 # intentional shutdown
+		mail -s "$MN_NAME [$MUD_NAME]" "$ADMIN" <<-EOF
+			$MN_NAME
+			
+			$MUD_NAME
+			Exit code: $CODE
+			Uptime: $TIME seconds
+
+			Restarting in $WAITMSG.
+		EOF
+		;;
+	'signal')
+		[ "$CODE" = 15 ] && exit 1 # SIGTERM
+		mail -s "$MN_NAME [$MUD_NAME]" "$ADMIN" <<-EOF
+			$MN_NAME
+			
+			$MUD_NAME
+			Signal: $CODE
+			Uptime: $TIME seconds
+
+			Restarting in $WAITMSG.
+		EOF
+		;;
+	*)
+		mail -s "$MN_NAME [$MUD_NAME]" "$ADMIN" <<-EOF
+			$MN_NAME
+			
+			$MUD_NAME
+			Cause of death: unknown
+			Uptime: $TIME seconds
+
+			Restarting $WAITMSG.
+		EOF
+		;;
+esac
+
+[ "$WAIT" -ne "0" ] && sleep "$WAIT"
+exit 0
